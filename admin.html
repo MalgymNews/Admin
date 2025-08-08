@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(45%, 1fr));
+      gap: 10px;
+      padding: 20px;
+    }
+    .card {
+      background-color: #ffa500;
+      color: black;
+      padding: 20px;
+      text-align: center;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .card:hover {
+      background-color: #e59400;
+    }
+    .hidden {
+      display: none;
+    }
+    .form-group {
+      margin-bottom: 10px;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    button {
+      padding: 10px;
+      background-color: black;
+      color: white;
+      border: none;
+      width: 100%;
+      margin-top: 10px;
+    }
+    h3 {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="login-section">
+  <h3>Přihlášení admina</h3>
+  <div class="form-group">
+    <label for="admin-password">Heslo:</label>
+    <input type="password" id="admin-password">
+  </div>
+  <button onclick="loginAdmin()">Přihlásit se</button>
+</div>
+
+<div id="panel-section" class="hidden">
+  <h3>Admin panel</h3>
+  <div class="grid-container" id="main-menu">
+    <div class="card" onclick="showSection('add-credits')">Přidat kredity</div>
+    <div class="card" onclick="showSection('manage-users')">Spravovat uživatele</div>
+    <div class="card" onclick="showSection('add-news')">Přidat noviny</div>
+    <div class="card" onclick="showSection('manage-news')">Spravovat noviny</div>
+    <div class="card" onclick="logoutAdmin()">Odhlásit se</div>
+  </div>
+
+  <!-- Add credits -->
+  <div id="add-credits" class="hidden">
+    <div id="user-grid" class="grid-container"></div>
+    <div id="credit-form" class="hidden">
+      <h3>Přidat kredity uživateli: <span id="selected-user"></span></h3>
+      <div class="form-group">
+        <label for="credit-amount">Počet kreditů:</label>
+        <input type="number" id="credit-amount">
+      </div>
+      <button onclick="submitCredits()">Přidat kredity</button>
+      <button onclick="returnToMenu()">Zpět na hlavní menu</button>
+    </div>
+  </div>
+
+  <!-- Manage users -->
+  <div id="manage-users" class="hidden">
+    <div id="user-manage-grid" class="grid-container"></div>
+    <div id="user-edit-form" class="hidden">
+      <h3>Úprava uživatele: <span id="edit-user"></span></h3>
+      <div class="form-group"><label>Email:</label><input id="edit-email"></div>
+      <div class="form-group"><label>Heslo:</label><input id="edit-password"></div>
+      <div class="form-group"><label>Kredity:</label><input id="edit-balance" type="number"></div>
+      <button onclick="saveUser()">Uložit změny</button>
+      <button onclick="returnToMenu()">Zpět na hlavní menu</button>
+    </div>
+  </div>
+
+  <!-- Add news -->
+  <div id="add-news" class="hidden">
+    <h3>Přidat noviny</h3>
+    <div class="form-group"><label>Název:</label><input id="news-name"></div>
+    <div class="form-group"><label>Cena (kredity):</label><input id="news-cost" type="number"></div>
+    <div class="form-group"><label>Soubor (.pdf):</label><input id="news-file" type="file" accept=".pdf"></div>
+    <button onclick="uploadNews()">Nahrát noviny</button>
+    <button onclick="returnToMenu()">Zpět na hlavní menu</button>
+  </div>
+
+  <!-- Manage news -->
+  <div id="manage-news" class="hidden">
+    <h3>Spravovat noviny</h3>
+    <div id="news-manage-grid" class="grid-container"></div>
+    <button onclick="returnToMenu()">Zpět na hlavní menu</button>
+  </div>
+</div>
+
+<script>
+let selectedUser = "", editUser = "";
+
+function hideAllSections() {
+  document.querySelectorAll("#panel-section > div").forEach(div => div.classList.add("hidden"));
+}
+
+function showSection(sectionId) {
+  hideAllSections();
+  document.getElementById(sectionId).classList.remove("hidden");
+  if (sectionId === "add-credits") loadUsersForCredits();
+  if (sectionId === "manage-users") loadUsersForManagement();
+  if (sectionId === "manage-news") loadNewsForManagement();
+}
+
+function returnToMenu() {
+  hideAllSections();
+  document.getElementById("main-menu").classList.remove("hidden");
+}
+
+async function loginAdmin() {
+  const password = document.getElementById("admin-password").value;
+  const res = await fetch("https://api.malgymnews.eu/adminlogin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password })
+  });
+  const data = await res.json();
+  if (data.status === "success") {
+    localStorage.setItem("admin_token", data.token);
+    document.getElementById("login-section").classList.add("hidden");
+    document.getElementById("panel-section").classList.remove("hidden");
+  } else {
+    alert("Špatné heslo.");
+  }
+}
+
+function logoutAdmin() {
+  localStorage.removeItem("admin_token");
+  location.reload();
+}
+
+async function loadUsersForCredits() {
+  const res = await fetch("https://api.malgymnews.eu/getusers");
+  const data = await res.json();
+  const userGrid = document.getElementById("user-grid");
+  userGrid.innerHTML = "";
+  data.users.forEach(user => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerText = user;
+    div.onclick = () => {
+      selectedUser = user;
+      document.getElementById("selected-user").innerText = user;
+      userGrid.classList.add("hidden");
+      document.getElementById("credit-form").classList.remove("hidden");
+    };
+    userGrid.appendChild(div);
+  });
+}
+
+async function loadUsersForManagement() {
+  const res = await fetch("https://api.malgymnews.eu/getusers");
+  const data = await res.json();
+  const grid = document.getElementById("user-manage-grid");
+  grid.innerHTML = "";
+  data.users.forEach(user => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerText = user;
+    div.onclick = async () => {
+      editUser = user;
+      const res = await fetch("https://api.malgymnews.eu/getuser", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: user })
+      });
+      const userData = await res.json();
+      document.getElementById("edit-user").innerText = user;
+      document.getElementById("edit-email").value = userData.email;
+      document.getElementById("edit-password").value = userData.password;
+      document.getElementById("edit-balance").value = userData.balance;
+      grid.classList.add("hidden");
+      document.getElementById("user-edit-form").classList.remove("hidden");
+    };
+    grid.appendChild(div);
+  });
+}
+
+async function submitCredits() {
+  const amount = parseInt(document.getElementById("credit-amount").value);
+  const token = localStorage.getItem("admin_token");
+  const res = await fetch("https://api.malgymnews.eu/addcredits", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: selectedUser, amount, token })
+  });
+  const data = await res.json();
+  if (data.status === "success") returnToMenu();
+  else alert("Chyba: " + data.message);
+}
+
+async function saveUser() {
+  const email = document.getElementById("edit-email").value;
+  const password = document.getElementById("edit-password").value;
+  const balance = parseInt(document.getElementById("edit-balance").value);
+  const token = localStorage.getItem("admin_token");
+
+  const res = await fetch("https://api.malgymnews.eu/updateuser", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: editUser, email, password, balance, token })
+  });
+
+  const data = await res.json();
+  if (data.status === "success") returnToMenu();
+  else alert("Chyba: " + data.message);
+}
+
+async function uploadNews() {
+  const token = localStorage.getItem("admin_token");
+  const formData = new FormData();
+  formData.append("token", token);
+  formData.append("fname", document.getElementById("news-name").value);
+  formData.append("cost", document.getElementById("news-cost").value);
+  formData.append("file", document.getElementById("news-file").files[0]);
+
+  const res = await fetch("https://api.malgymnews.eu/uploadnews", {
+    method: "POST",
+    body: formData
+  });
+  const data = await res.json();
+  if (data.status === "success") {
+    alert("✅ Nahráno");
+    returnToMenu();
+  } else {
+    alert("Chyba: " + data.message);
+  }
+}
+
+async function loadNewsForManagement() {
+  const res = await fetch("https://api.malgymnews.eu/getallnews");
+  const data = await res.json();
+  const grid = document.getElementById("news-manage-grid");
+  grid.innerHTML = "";
+  Object.entries(data.news).forEach(([id, news]) => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `
+      <b>${news.fname}</b><br>
+      Cena: <input type="number" value="${news.cost}" id="cost-${id}">
+      Název: <input value="${news.fname}" id="fname-${id}">
+      <button onclick="updateNews('${id}')">💾 Uložit</button>
+      <button onclick="deleteNews('${id}')">🗑️ Smazat</button>
+    `;
+    grid.appendChild(div);
+  });
+}
+
+async function updateNews(id) {
+  const token = localStorage.getItem("admin_token");
+  const fname = document.getElementById(`fname-${id}`).value;
+  const cost = parseInt(document.getElementById(`cost-${id}`).value);
+
+  const res = await fetch("https://api.malgymnews.eu/updatenews", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, news_id: id, fname, cost })
+  });
+  const data = await res.json();
+  if (data.status !== "success") alert("Chyba: " + data.message);
+}
+
+async function deleteNews(id) {
+  const token = localStorage.getItem("admin_token");
+
+  const res = await fetch("https://api.malgymnews.eu/deletenews", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, news_id: id })
+  });
+  const data = await res.json();
+  if (data.status === "success") loadNewsForManagement();
+  else alert("Chyba: " + data.message);
+}
+
+window.onload = () => {
+  if (localStorage.getItem("admin_token")) {
+    document.getElementById("login-section").classList.add("hidden");
+    document.getElementById("panel-section").classList.remove("hidden");
+  }
+}
+</script>
+</body>
+</html>
